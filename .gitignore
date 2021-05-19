@@ -1,0 +1,11 @@
+.idea
+.DS_Store
+.vscode
+*.mp4
+*.yuv
+*.y4m
+*.ts
+build
+Build
+Video_Codec_SDK*
+old_nvcodec
