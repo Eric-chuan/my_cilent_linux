@@ -74,6 +74,7 @@ void Stream_Puller::loop()
                     memcpy(&this->data_buf[data_len], &pack[5 + offset], (188 - (5 + offset)));
                     data_len += (188 - (5 + offset));
                     this->output[0]->put(this->data_buf, data_len - my_offset, cnt);
+                    usleep(20000);
                     has_output = true;
                 }
             }
