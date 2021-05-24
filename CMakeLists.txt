@@ -73,6 +73,7 @@ add_executable(my_client_linux ${SOURCES})
 target_link_libraries(my_client_linux
         Threads::Threads
         cuda
+        -lcurl
         ${CUDART_LIB} ${FREEGLUT_LIB} ${GLEW32_LIB} ${X11_LIB} ${GL_LIB})
 
 

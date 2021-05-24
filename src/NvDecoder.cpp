@@ -222,13 +222,13 @@ void NvDecoder::loop_nvdecoder_receive()
                     cuCtxPushCurrent(this->nvcontext);
                     gInstance.GetDeviceFrameBuffer(&dpFrame, &nPPitch);
                     my_convert_nv12_to_yv12((uint8_t *)cuDevPtr, (uint8_t *)dyvFrame, this->nvDev_id);
-                    shift = fcnt_out % 23 + 1;
-                    viewIdx = viewIdx_selector(0, shift);
+                    //shift = fcnt_out % 23 + 1;
+                    viewIdx = viewIdx_selector(0, 1);
                     scale = (viewIdx <= 8) ? 2 : 4;
                     view_selector_gpu((uint8_t *)dyvFrame, (uint8_t *)dselectedFrame, viewIdx, this->nvDev_id);
                     my_bicubic_yv12_upsample((uint8_t *)dselectedFrame, (uint8_t *)dupsampledFrame, scale, this->nvDev_id);
-                    cuMemcpyDtoH(outyuv, dupsampledFrame, FRAME_SIZE / 4);
-                    fwrite(outyuv, 1, FRAME_SIZE / 4, outfile);
+                    //cuMemcpyDtoH(outyuv, dupsampledFrame, FRAME_SIZE / 4);
+                    //fwrite(outyuv, 1, FRAME_SIZE / 4, outfile);
                     my_convert_yv12_to_bgra_HD((uint8_t *)dupsampledFrame, (uint8_t *)dpFrame, this->nvDev_id);
                     cuCtxPopCurrent(NULL);
                     cuCtxPushCurrent(this->nvcontext);

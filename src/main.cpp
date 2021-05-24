@@ -1,4 +1,5 @@
 #include "Pull_Stream.h"
+#include "HLSDownload.h"
 #include "NvDecoder.h"
 #include <thread>
 #include <unistd.h>
@@ -27,10 +28,10 @@ int main(int argc,char *argv[])
     sys_f_cnt = 0;
     int c;
     int option_index = 0;
-    int fifo_len = 5;
-    int frame_num = 100;
+    int fifo_len = 10;
+    int frame_num = 25;
     int start_id = 10;
-    char * inputurl = "../ts.ts";
+    char inputurl[50] = "http://localhost/HLS/master.m3u8";
 
     int fifo_num = 1 + 1;
     long long fifo_data_size = fifo_len * MAX_FIFO_SIZE;
@@ -40,11 +41,13 @@ int main(int argc,char *argv[])
     FIFO **video_stream_pulled_265 = new FIFO * [1];
     FIFO *video_stream_decoded_yuv = new FIFO();
 
-    Stream_Puller **stream_puller = new Stream_Puller * [1];
+    //Stream_Puller **stream_puller = new Stream_Puller * [1];
+    HLSDownload **hls_downloader = new HLSDownload * [1];
     NvDecoder **decoder = new NvDecoder * [1];
 
     int module_num = 0;
-    module_num += stream_puller[0]->get_mem_cnt();
+    //module_num += stream_puller[0]->get_mem_cnt();
+    module_num += hls_downloader[0]->get_mem_cnt();
     module_num += decoder[0]->get_mem_cnt();
     uint8_t * module_data = new uint8_t[module_num * MAX_FIFO_SIZE];
 
@@ -85,13 +88,17 @@ int main(int argc,char *argv[])
     SDL_Event evt;*/
 
     for(int i = 0; i < 1; i++){
-        stream_puller[i] = new Stream_Puller();
-        int sp_buf_index =i * MAX_FIFO_SIZE * stream_puller[i]->get_mem_cnt();
-        stream_puller[i]->set_buf(&module_data[sp_buf_index]);
+        //stream_puller[i] = new Stream_Puller();
+        //int sp_buf_index =i * MAX_FIFO_SIZE * stream_puller[i]->get_mem_cnt();
+        //stream_puller[i]->set_buf(&module_data[sp_buf_index]);
+        hls_downloader[i] = new HLSDownload();
+        int sp_buf_index =i * MAX_FIFO_SIZE * hls_downloader[i]->get_mem_cnt();
+        hls_downloader[i]->set_buf(&module_data[sp_buf_index]);
         decoder[i] = new NvDecoder();
-        int dec_buf_index = 1 * MAX_FIFO_SIZE * stream_puller[0]->get_mem_cnt() + i * MAX_FIFO_SIZE * stream_puller[i]->get_mem_cnt();
+        int dec_buf_index = 1 * MAX_FIFO_SIZE * hls_downloader[0]->get_mem_cnt() + i * MAX_FIFO_SIZE * hls_downloader[i]->get_mem_cnt();
         decoder[i]->set_buf(&module_data[dec_buf_index]);
-        stream_puller[i]->init(NULL, stream_puller_output + i, 1, 1, inputurl);
+        //stream_puller[i]->init(NULL, stream_puller_output + i, 1, 1, inputurl);
+        hls_downloader[i]->init(NULL, stream_puller_output + i, 1, 1, inputurl);
         //use cude_device to choose graphic cards. Set i % 2 to balance loads
         //here set to 0 to use the first card
         decoder[i]->init(decoder_input + i, decoder_output, 1, 1, 0, &cuContext);
@@ -102,18 +109,21 @@ int main(int argc,char *argv[])
 
 
 
-    thread *stream_puller_thread = new thread[1];
+    //thread *stream_puller_thread = new thread[1];
+    thread *hls_downloader_thread = new thread[1];
     thread *decoder_send_thread = new thread[1] ;
     thread *decoder_receive_thread = new thread[1];
 
     for (int i = 0; i < 1; i++){
-        stream_puller_thread[i] = std::thread(&Stream_Puller::loop, std::ref(stream_puller[i]));
+        //stream_puller_thread[i] = std::thread(&Stream_Puller::loop, std::ref(stream_puller[i]));
+        hls_downloader_thread[i] = std::thread(&HLSDownload::loop, std::ref(hls_downloader[i]));
         decoder_send_thread[i] = std::thread(&NvDecoder::loop_nvdecoder_send, std::ref(decoder[i]));
         decoder_receive_thread[i] = std::thread(&NvDecoder::loop_nvdecoder_receive, std::ref(decoder[i]));
     }
 
     for(int i = 0; i < 1; i++){
-        stream_puller_thread[i].detach();
+        //stream_puller_thread[i].detach();
+        hls_downloader_thread[i].detach();
         decoder_send_thread[i].detach();
         decoder_receive_thread[i].detach();
     }
@@ -151,10 +161,10 @@ int main(int argc,char *argv[])
 
 
     for(int i = 0; i < 1; i++){
-        delete stream_puller[i];
+        delete hls_downloader[i];
         delete decoder[i];
     }
-    delete [] stream_puller;
+    delete [] hls_downloader;
     delete [] decoder;
 
 
@@ -172,7 +182,7 @@ int main(int argc,char *argv[])
 
     delete [] fifo_data;
     delete [] module_data;
-    delete [] stream_puller_thread;
+    delete [] hls_downloader_thread;
     delete [] decoder_send_thread;
     delete [] decoder_receive_thread;
     return 0;
