@@ -16,9 +16,10 @@ public:
     bool start_delivery;
     bool local_output;
     int set_latlevel;
-
+    std::atomic<int> centerIdx;
+    std::atomic<int> pulled_centerIdx;
 public:
-    void init(int packet_cnt, int *client_echo);
+    void init(int packet_cnt,  int c);
 };
 
 #endif //MY_CLIENT_LINUX_CONTEXT_H

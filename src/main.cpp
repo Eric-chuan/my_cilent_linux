@@ -1,6 +1,8 @@
-#include "Pull_Stream.h"
+//#include "Pull_Stream.h"
 #include "HLSDownload.h"
 #include "NvDecoder.h"
+#include "Context.h"
+#include "KeyboardControl.h"
 #include <thread>
 #include <unistd.h>
 //#include "SDL2/SDL.h"
@@ -26,7 +28,8 @@ int main(int argc,char *argv[])
     cuCtxCreate(&cuContext, CU_CTX_SCHED_SPIN, 0);
 
     sys_f_cnt = 0;
-    int c;
+    Context *host_ctx = new Context();
+    int c = 3;
     int option_index = 0;
     int fifo_len = 10;
     int frame_num = 25;
@@ -37,6 +40,8 @@ int main(int argc,char *argv[])
     long long fifo_data_size = fifo_len * MAX_FIFO_SIZE;
     uint8_t * fifo_data = new uint8_t[fifo_data_size * fifo_num];
 
+    host_ctx->init(frame_num > 0 ? (frame_num + 1) : 0, c);
+
 
     FIFO **video_stream_pulled_265 = new FIFO * [1];
     FIFO *video_stream_decoded_yuv = new FIFO();
@@ -44,6 +49,7 @@ int main(int argc,char *argv[])
     //Stream_Puller **stream_puller = new Stream_Puller * [1];
     HLSDownload **hls_downloader = new HLSDownload * [1];
     NvDecoder **decoder = new NvDecoder * [1];
+    KeyboardControl **keyboard_controler = new  KeyboardControl * [1];
 
     int module_num = 0;
     //module_num += stream_puller[0]->get_mem_cnt();
@@ -97,11 +103,13 @@ int main(int argc,char *argv[])
         decoder[i] = new NvDecoder();
         int dec_buf_index = 1 * MAX_FIFO_SIZE * hls_downloader[0]->get_mem_cnt() + i * MAX_FIFO_SIZE * hls_downloader[i]->get_mem_cnt();
         decoder[i]->set_buf(&module_data[dec_buf_index]);
+        keyboard_controler[i] = new KeyboardControl();
         //stream_puller[i]->init(NULL, stream_puller_output + i, 1, 1, inputurl);
-        hls_downloader[i]->init(NULL, stream_puller_output + i, 1, 1, inputurl);
+        hls_downloader[i]->init(NULL, stream_puller_output + i, 1, 1, inputurl, host_ctx);
         //use cude_device to choose graphic cards. Set i % 2 to balance loads
         //here set to 0 to use the first card
-        decoder[i]->init(decoder_input + i, decoder_output, 1, 1, 0, &cuContext);
+        decoder[i]->init(decoder_input + i, decoder_output, 1, 1, 0, &cuContext, host_ctx);
+        keyboard_controler[0]->init(host_ctx);
     }
 
     timeval t_0;
@@ -113,12 +121,14 @@ int main(int argc,char *argv[])
     thread *hls_downloader_thread = new thread[1];
     thread *decoder_send_thread = new thread[1] ;
     thread *decoder_receive_thread = new thread[1];
+    thread *keyboard_controler_thread = new thread[1];
 
     for (int i = 0; i < 1; i++){
         //stream_puller_thread[i] = std::thread(&Stream_Puller::loop, std::ref(stream_puller[i]));
         hls_downloader_thread[i] = std::thread(&HLSDownload::loop, std::ref(hls_downloader[i]));
         decoder_send_thread[i] = std::thread(&NvDecoder::loop_nvdecoder_send, std::ref(decoder[i]));
         decoder_receive_thread[i] = std::thread(&NvDecoder::loop_nvdecoder_receive, std::ref(decoder[i]));
+        keyboard_controler_thread[i] = std::thread(&KeyboardControl::loop, std::ref(keyboard_controler[i]));
     }
 
     for(int i = 0; i < 1; i++){
@@ -126,6 +136,7 @@ int main(int argc,char *argv[])
         hls_downloader_thread[i].detach();
         decoder_send_thread[i].detach();
         decoder_receive_thread[i].detach();
+        keyboard_controler_thread[i].detach();
     }
 
     fprintf(stderr, "Waiting for stream.\n");
@@ -163,9 +174,11 @@ int main(int argc,char *argv[])
     for(int i = 0; i < 1; i++){
         delete hls_downloader[i];
         delete decoder[i];
+        delete keyboard_controler[i];
     }
     delete [] hls_downloader;
     delete [] decoder;
+    delete [] keyboard_controler;
 
 
     delete [] stream_puller_output;
@@ -185,5 +198,6 @@ int main(int argc,char *argv[])
     delete [] hls_downloader_thread;
     delete [] decoder_send_thread;
     delete [] decoder_receive_thread;
+    delete [] keyboard_controler_thread;
     return 0;
 }

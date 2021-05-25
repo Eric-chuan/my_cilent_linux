@@ -6,6 +6,7 @@
 #define MY_CLIENT_LINUX_NVDECODER_H
 #include "common.h"
 #include "Module.h"
+#include "Context.h"
 
 //xujun
 /*#include "dynlink_cuviddec.h" // <cuviddec.h>
@@ -55,6 +56,7 @@ private:
     std::atomic<bool> sender_stop;
     uint8_t * data_buf;
     int nvDev_id;
+    Context *sys_ctx;
 public:
     CUvideodecoder nvdecoder;
     videoparser nvparser;
@@ -62,7 +64,7 @@ public:
     CUcontext nvcontext;
     int fcnt_in, fcnt_out;
     std::atomic<bool> stop;
-    void init(FIFO ** input, FIFO ** output, int input_cnt, int output_cnt,int cuda_device, CUcontext * ctx);
+    void init(FIFO ** input, FIFO ** output, int input_cnt, int output_cnt,int cuda_device, CUcontext * ctx,  Context *sys_ctx);
     void loop_nvdecoder_send();
     void loop_nvdecoder_receive();
     int viewIdx_selector(int c, int shift);

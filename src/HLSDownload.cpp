@@ -31,13 +31,14 @@ static size_t WriteMemoryCallback(void *contents, size_t size, size_t nmemb, voi
     return realsize;
 }
 
-void HLSDownload::init(FIFO ** input, FIFO ** output, int input_cnt, int output_cnt,char *input_url)
+void HLSDownload::init(FIFO ** input, FIFO ** output, int input_cnt, int output_cnt,char *input_url, Context *ctx)
 {
     this->input_cnt = input_cnt;
     this->input = input;
     this->output_cnt = output_cnt;
     this->output = output;
     this->master_url = input_url;
+    this->ctx = ctx;
     curl_global_init(CURL_GLOBAL_ALL);
     this->master_playlist = new HLSMasterPlaylist();
     memset(master_playlist, 0x00, sizeof(HLSMasterPlaylist));
@@ -176,10 +177,13 @@ void HLSDownload::vod_download_segment(int centerIdx, int segIdx)
             }
             break;
         }
-        fwrite(ms->data, ms->data_len, sizeof(uint8_t), out_file);
+        //fwrite(ms->data, ms->data_len, sizeof(uint8_t), out_file);
         this->segment_ts_len = ms->data_len;
         this->segment_ts_data = (uint8_t*)malloc(ms->data_len * sizeof(uint8_t));
         memcpy(this->segment_ts_data, ms->data, ms->data_len);
+        free((ms->data));
+        this->ctx->pulled_centerIdx = centerIdx;
+        printf("pulled view %d\n", centerIdx);
     }
     fclose(out_file);
 }
@@ -202,13 +206,9 @@ void HLSDownload::loop()
     int packet_length = 188;
     int cnt = 0;
     int segIdx = 0;
-    int centerIdx = 0;
     while(true) {
-        vod_download_segment(centerIdx, segIdx);
+        vod_download_segment(this->ctx->centerIdx, segIdx);
         segIdx = (segIdx + 1) % 8;
-        if (segIdx == 0) {
-            centerIdx = (centerIdx + 1) % 2;
-        }
         uint8_t* current_p = this->segment_ts_data;
         unsigned int read_size = (this->segment_ts_len >= buffer_len) ? buffer_len : this->segment_ts_len;
         uint8_t* buffer_data = this->segment_ts_data;
@@ -238,11 +238,12 @@ void HLSDownload::loop()
                                 if(pes->PES_packet_data_length != 0){
                                     //fwrite(pes->elementy_stream_position, received_length, 1, es_fp);
                                     this->output[0]->put(pes->elementy_stream_position, received_length, cnt - 1);
-                                    usleep(20000);
+                                    usleep(35000);
                                 }
-                            memset(this->data_buf, 0, received_length);
-                            received_length = 0;
-                        }
+                                delete pes;
+                                memset(this->data_buf, 0, received_length);
+                                received_length = 0;
+                            }
                             received_flag = 1;
                         }
                         if(received_flag){
@@ -259,23 +260,21 @@ void HLSDownload::loop()
                                 if(pes->PES_packet_data_length != 0){
                                     //fwrite(pes->elementy_stream_position, received_length, 1, es_fp);
                                     this->output[0]->put(pes->elementy_stream_position, received_length, cnt);
-                                    usleep(20000);
+                                    usleep(35000);
                                 }
+                                memset(this->data_buf, 0, received_length);
+                                received_length = 0;
+                                delete pes;
                             }
                         }
-
                     }
                 }
             current_p += packet_length;
+            delete ts_header;
             }
         read_size = (segment_ts_data - current_p >= buffer_len - segment_ts_len) ? buffer_len : segment_ts_data - current_p + segment_ts_len;
         buffer_data = current_p;
         }
-
-
+        free(this->segment_ts_data);
     }
-
-
-
-
 }

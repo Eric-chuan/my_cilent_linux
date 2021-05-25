@@ -5,6 +5,7 @@
 *.yuv
 *.y4m
 *.ts
+*.hevc
 build
 Build
 Video_Codec_SDK*

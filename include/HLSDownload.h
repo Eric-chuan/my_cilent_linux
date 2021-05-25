@@ -6,6 +6,7 @@
 #define MY_CLIENT_LINUX_HLS_DOWNLOAD_H
 #include "common.h"
 #include "Module.h"
+#include "Context.h"
 #include <atomic>
 #include <curl/curl.h>
 
@@ -140,6 +141,7 @@ static size_t WriteMemoryCallback(void *contents, size_t size, size_t nmemb, voi
 class HLSDownload : public Module
 {
 private:
+    Context *ctx;
     char* master_url;
     int stream_num;
     HLSMasterPlaylist* master_playlist;
@@ -149,7 +151,7 @@ private:
     uint8_t * data_buf;
     //timeval * tout;
 public:
-    void init(FIFO ** input, FIFO ** output, int input_cnt, int output_cnt, char *input_url);
+    void init(FIFO ** input, FIFO ** output, int input_cnt, int output_cnt, char *input_url, Context *ctx);
     int init_media_playlists();
     int init_media_segments();
     long get_hls_data_from_url(char* url, char** data, size_t *size, int type);

@@ -55,7 +55,7 @@ int videoparser::HandlePictureDisplay(void *pUserData, CUVIDPARSERDISPINFO *pDis
     return 1;
 }
 
-void NvDecoder::init(FIFO ** input, FIFO ** output, int input_cnt, int output_cnt, int cuda_device, CUcontext * ctx)
+void NvDecoder::init(FIFO ** input, FIFO ** output, int input_cnt, int output_cnt, int cuda_device, CUcontext * ctx, Context *sys_ctx)
 {
     this->input_cnt = input_cnt;
     this->input = input;
@@ -66,6 +66,7 @@ void NvDecoder::init(FIFO ** input, FIFO ** output, int input_cnt, int output_cn
     this->nvDev_id = cuda_device;
     this->stop = false;
     this->sender_stop = false;
+    this->sys_ctx = sys_ctx;
 
     //init cuda ctx
     CUvideoctxlock g_CtxLock = NULL;
@@ -173,13 +174,13 @@ void NvDecoder::loop_nvdecoder_receive()
 
     int nPPitch = 15360, iMatrix = 2;
 
-    int shift;
+    int shift = 1;
     int scale;
     int viewIdx;
     CUdeviceptr dyvFrame;
     cuMemAlloc(&dyvFrame, FRAME_SIZE);
     CUdeviceptr dselectedFrame;
-    cuMemAlloc(&dselectedFrame, FRAME_SIZE / 16);
+    cuMemAlloc(&dselectedFrame, FRAME_SIZE / 4);
     CUdeviceptr dupsampledFrame;
     cuMemAlloc(&dupsampledFrame, FRAME_SIZE / 4);
 
@@ -187,7 +188,7 @@ void NvDecoder::loop_nvdecoder_receive()
     FramePresenterGLX gInstance(1920, 1080);
     CUdeviceptr dpFrame;
 
-    FILE* outfile = fopen("../outyuv_1920x1080.yuv", "wb");
+    FILE* outfile = fopen("/run/media/eric/023A7DD23A7DC369/outyuv1_1920x1080.yuv", "wb");
     uint8_t* outyuv = (uint8_t*)malloc(FRAME_SIZE * 30 / 4);
 
 
@@ -218,18 +219,25 @@ void NvDecoder::loop_nvdecoder_receive()
                 // use CUDA based Device to Host memcpy
 
                 if (rResult == CUDA_SUCCESS){
-                    fprintf(stderr,"test for frame %d.\n",this->fcnt_out);
+                    //fprintf(stderr,"test for frame %d.\n",this->fcnt_out - 1);
                     cuCtxPushCurrent(this->nvcontext);
                     gInstance.GetDeviceFrameBuffer(&dpFrame, &nPPitch);
                     my_convert_nv12_to_yv12((uint8_t *)cuDevPtr, (uint8_t *)dyvFrame, this->nvDev_id);
-                    //shift = fcnt_out % 23 + 1;
-                    viewIdx = viewIdx_selector(0, 1);
-                    scale = (viewIdx <= 8) ? 2 : 4;
+                    viewIdx = viewIdx_selector(this->sys_ctx->pulled_centerIdx, this->sys_ctx->centerIdx - this->sys_ctx->pulled_centerIdx);
+                    scale = viewIdx == 0 ? 0 : ((viewIdx <= 8) ? 2 : 4);
                     view_selector_gpu((uint8_t *)dyvFrame, (uint8_t *)dselectedFrame, viewIdx, this->nvDev_id);
-                    my_bicubic_yv12_upsample((uint8_t *)dselectedFrame, (uint8_t *)dupsampledFrame, scale, this->nvDev_id);
+                    if (scale > 0) {
+                        my_bicubic_yv12_upsample((uint8_t *)dselectedFrame, (uint8_t *)dupsampledFrame, scale, this->nvDev_id);
+                        //cuMemcpyDtoH(outyuv, dupsampledFrame, FRAME_SIZE / 4);
+                        //fwrite(outyuv, 1, FRAME_SIZE / 4, outfile);
+                        my_convert_yv12_to_bgra_HD((uint8_t *)dupsampledFrame, (uint8_t *)dpFrame, this->nvDev_id);
+                    } else {
+                        //cuMemcpyDtoH(outyuv, dselectedFrame, FRAME_SIZE / 4);
+                        //fwrite(outyuv, 1, FRAME_SIZE / 4, outfile);
+                        my_convert_yv12_to_bgra_HD((uint8_t *)dselectedFrame, (uint8_t *)dpFrame, this->nvDev_id);
+                    }
                     //cuMemcpyDtoH(outyuv, dupsampledFrame, FRAME_SIZE / 4);
                     //fwrite(outyuv, 1, FRAME_SIZE / 4, outfile);
-                    my_convert_yv12_to_bgra_HD((uint8_t *)dupsampledFrame, (uint8_t *)dpFrame, this->nvDev_id);
                     cuCtxPopCurrent(NULL);
                     cuCtxPushCurrent(this->nvcontext);
                     gInstance.ReleaseDeviceFrameBuffer();
@@ -240,11 +248,11 @@ void NvDecoder::loop_nvdecoder_receive()
                     uint8_t * fifo_data_ptr;
                     int cnt_tmp;
                     long long len_tmp;
-                    fifo_data_ptr = this->output[0]->fetch_put_pointer(FRAME_SIZE, cnt_out, fifo_handler);
-                    //cuMemcpyDtoH(fifo_data_ptr, pDevPtr, FRAME_SIZE);
-                    this->output[0]->release_put_pointer(fifo_handler);
-                    fifo_data_ptr = this->output[0]->fetch_get_pointer(len_tmp, cnt_tmp, fifo_handler);
-                    this->output[0]->release_get_pointer(fifo_handler);
+                    // fifo_data_ptr = this->output[0]->fetch_put_pointer(FRAME_SIZE, cnt_out, fifo_handler);
+                    // //cuMemcpyDtoH(fifo_data_ptr, pDevPtr, FRAME_SIZE);
+                    // this->output[0]->release_put_pointer(fifo_handler);
+                    // fifo_data_ptr = this->output[0]->fetch_get_pointer(len_tmp, cnt_tmp, fifo_handler);
+                    // this->output[0]->release_get_pointer(fifo_handler);
                 }
             }
             is_decoding[current_id] = false;
@@ -335,8 +343,6 @@ int NvDecoder::viewIdx_selector(int c, int shift)
             rightIdx[4+i] = c + 4 + (i+1);
         }
     }
-
-
     int view_now = (c + shift < 0) ? 0 : ((c + shift > VIEW_NUM - 1)  ? VIEW_NUM - 1 : c + shift);
     int viewIdx;
     if (shift == 0) {
@@ -352,6 +358,7 @@ int NvDecoder::viewIdx_selector(int c, int shift)
             }
         }
     }
-    printf("\tviewIdx=%d\n", viewIdx);
+    int centerIdx = this->sys_ctx->centerIdx;
+    printf("\tcenterIdx=%d, pulled_centerIdx=%i, shift=%d, viewIdx=%d\n", centerIdx, c, shift, viewIdx);
     return viewIdx;
 }
