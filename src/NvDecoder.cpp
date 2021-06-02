@@ -188,8 +188,8 @@ void NvDecoder::loop_nvdecoder_receive()
     FramePresenterGLX gInstance(1920, 1080);
     CUdeviceptr dpFrame;
 
-    FILE* outfile = fopen("/run/media/eric/023A7DD23A7DC369/outyuv1_1920x1080.yuv", "wb");
-    uint8_t* outyuv = (uint8_t*)malloc(FRAME_SIZE * 30 / 4);
+    FILE* outfile = fopen("/ssd/outyuv_1920x1080.yuv", "wb");
+    uint8_t* outyuv = (uint8_t*)malloc(FRAME_SIZE / 4);
 
 
     while (true) {
@@ -236,8 +236,6 @@ void NvDecoder::loop_nvdecoder_receive()
                         //fwrite(outyuv, 1, FRAME_SIZE / 4, outfile);
                         my_convert_yv12_to_bgra_HD((uint8_t *)dselectedFrame, (uint8_t *)dpFrame, this->nvDev_id);
                     }
-                    //cuMemcpyDtoH(outyuv, dupsampledFrame, FRAME_SIZE / 4);
-                    //fwrite(outyuv, 1, FRAME_SIZE / 4, outfile);
                     cuCtxPopCurrent(NULL);
                     cuCtxPushCurrent(this->nvcontext);
                     gInstance.ReleaseDeviceFrameBuffer();

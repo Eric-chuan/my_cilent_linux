@@ -16,4 +16,5 @@
 #define MAX_FIFO_SIZE (4096 * 2160 * 3 / 2)
 #define FIFO_LEN 5
 #define FRAME_SIZE (3840 * 2160 * 3 / 2)
+#define MAX_SEG_SIZE (3840 * 2160 / 3)
 #endif //MY_CLIENT_LINUX_COMMON_H

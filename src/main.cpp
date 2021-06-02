@@ -32,9 +32,10 @@ int main(int argc,char *argv[])
     int c = 3;
     int option_index = 0;
     int fifo_len = 10;
-    int frame_num = 25;
+    int frame_num = 1000;
     int start_id = 10;
-    char inputurl[50] = "http://localhost/HLS/master.m3u8";
+    //char inputurl[50] = "http://172.16.7.187/hls/master.m3u8";
+    char inputurl[50] = "http://localhost/LiveHLS/master.m3u8";
 
     int fifo_num = 1 + 1;
     long long fifo_data_size = fifo_len * MAX_FIFO_SIZE;
@@ -118,6 +119,7 @@ int main(int argc,char *argv[])
 
 
     //thread *stream_puller_thread = new thread[1];
+    thread *hls_downloader_recv_thread = new thread[1];
     thread *hls_downloader_thread = new thread[1];
     thread *decoder_send_thread = new thread[1] ;
     thread *decoder_receive_thread = new thread[1];
@@ -125,6 +127,7 @@ int main(int argc,char *argv[])
 
     for (int i = 0; i < 1; i++){
         //stream_puller_thread[i] = std::thread(&Stream_Puller::loop, std::ref(stream_puller[i]));
+        hls_downloader_recv_thread[i] = std::thread(&HLSDownload::loop_recv, std::ref(hls_downloader[i]));
         hls_downloader_thread[i] = std::thread(&HLSDownload::loop, std::ref(hls_downloader[i]));
         decoder_send_thread[i] = std::thread(&NvDecoder::loop_nvdecoder_send, std::ref(decoder[i]));
         decoder_receive_thread[i] = std::thread(&NvDecoder::loop_nvdecoder_receive, std::ref(decoder[i]));
@@ -133,6 +136,7 @@ int main(int argc,char *argv[])
 
     for(int i = 0; i < 1; i++){
         //stream_puller_thread[i].detach();
+        hls_downloader_recv_thread[i].detach();
         hls_downloader_thread[i].detach();
         decoder_send_thread[i].detach();
         decoder_receive_thread[i].detach();
@@ -195,6 +199,7 @@ int main(int argc,char *argv[])
 
     delete [] fifo_data;
     delete [] module_data;
+    delete [] hls_downloader_recv_thread;
     delete [] hls_downloader_thread;
     delete [] decoder_send_thread;
     delete [] decoder_receive_thread;
