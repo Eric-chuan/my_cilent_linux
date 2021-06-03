@@ -357,6 +357,6 @@ int NvDecoder::viewIdx_selector(int c, int shift)
         }
     }
     int centerIdx = this->sys_ctx->centerIdx;
-    printf("\tcenterIdx=%d, pulled_centerIdx=%i, shift=%d, viewIdx=%d\n", centerIdx, c, shift, viewIdx);
+    //printf("\tcenterIdx=%d, pulled_centerIdx=%i, shift=%d, viewIdx=%d\n", centerIdx, c, shift, viewIdx);
     return viewIdx;
 }

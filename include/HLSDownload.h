@@ -149,16 +149,17 @@ private:
     HLSMediaPlaylist* media_playlists[25];
     uint8_t* segment_ts_data;
     int segment_ts_len;
+    int prev_segIdx[25];
     uint8_t * data_buf;
     FIFO *segment_fifo;
     //timeval * tout;
 public:
     void init(FIFO ** input, FIFO ** output, int input_cnt, int output_cnt, char *input_url, Context *ctx);
+    void destroy();
     int init_media_playlists();
     int update_m3u8();
     long get_hls_data_from_url(char* url, char** data, size_t *size, int type);
     void vod_download_segment(int centerIdx, int segIdx);
-    void ts_to_es();
     void loop_recv();
     void loop();
     int get_mem_cnt(){

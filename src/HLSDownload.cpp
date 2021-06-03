@@ -41,6 +41,9 @@ void HLSDownload::init(FIFO ** input, FIFO ** output, int input_cnt, int output_
     this->ctx = ctx;
     this->packet_cnt = ctx->packet_cnt;
 
+    for (int i = 0; i < 25; i++) {
+        this->prev_segIdx[i] = -1;
+    }
     this->segment_fifo = new FIFO();
     uint8_t *segment_fifo_data = new uint8_t[4 * MAX_SEG_SIZE];
     segment_fifo->init(4, MAX_SEG_SIZE, segment_fifo_data);
@@ -90,11 +93,13 @@ int HLSDownload::init_media_playlists()
 int HLSDownload::update_m3u8()
 {
     size_t size = 0;
-    for (int i = 0; i < stream_num; i++) {
-        get_hls_data_from_url(this->media_playlists[i]->url, &this->media_playlists[i]->source, &size, STRING);
+    int pass = 0;
+    while (pass < 25)
+    {
+        get_hls_data_from_url(this->media_playlists[pass]->url, &this->media_playlists[pass]->source, &size, STRING);
         bool url_expected = false;
         int seg_index = 0;
-        char *src = this->media_playlists[i]->source;
+        char *src = this->media_playlists[pass]->source;
         while(*src != '\0'){
             char *end_ptr = strchr(src, '\n');
             if (!end_ptr) {
@@ -108,24 +113,44 @@ int HLSDownload::update_m3u8()
                 }
             } else if (url_expected) {
                 size_t len = strlen(src);
-                this->media_playlists[i]->media_segments[seg_index] = (HLSMediaSegment*)malloc(sizeof(HLSMediaSegment));
-                memset(this->media_playlists[i]->media_segments[seg_index], 0x00, sizeof(HLSMediaSegment));
+                this->media_playlists[pass]->media_segments[seg_index] = (HLSMediaSegment*)malloc(sizeof(HLSMediaSegment));
+                memset(this->media_playlists[pass]->media_segments[seg_index], 0x00, sizeof(HLSMediaSegment));
                 // here we will fill new playlist
-                size_t max_length = len + strlen(this->media_playlists[i]->url) + 10;
+                size_t max_length = len + strlen(this->media_playlists[pass]->url) + 10;
                 char* extend_url = (char*)malloc(max_length);
-                char* sub_url = strstr(this->media_playlists[i]->url, "master");
-                char* head_url = (char*)malloc(sub_url - this->media_playlists[i]->url);
-                memcpy(head_url, this->media_playlists[i]->url, sub_url -this->media_playlists[i]->url);
+                char* sub_url = strstr(this->media_playlists[pass]->url, "master");
+                char* head_url = (char*)malloc(sub_url - this->media_playlists[pass]->url);
+                memcpy(head_url, this->media_playlists[pass]->url, sub_url -this->media_playlists[pass]->url);
                 sprintf(extend_url, "%s%s/../%s", head_url, sub_url + 15, src);
-                this->media_playlists[i]->media_segments[seg_index]->url = extend_url;
+                this->media_playlists[pass]->media_segments[seg_index]->url = extend_url;
                 seg_index++;
                 url_expected = false;
             }
             src = end_ptr + 1;
         }
+        int cur_segIdx;
+        int tmp;
+        char* start = strstr(this->media_playlists[pass]->media_segments[0]->url, "segment");
+        if (pass < 10){
+            sscanf(start, "segment%1d%d.ts", &tmp, &cur_segIdx);
+        } else {
+            sscanf(start, "segment%2d%d.ts", &tmp, &cur_segIdx);
+        }
+        //printf("prev and cur index :%d  %d\n", this->prev_segIdx[pass], cur_segIdx);
+        if (this->prev_segIdx[pass] == -1) {
+            this->prev_segIdx[pass] = cur_segIdx;
+            pass++;
+            continue;
+        } else if(cur_segIdx == (prev_segIdx[pass] + 1) % 8) {
+            this->prev_segIdx[pass] = cur_segIdx;
+            pass++;
+            continue;
+        } else if(cur_segIdx != (prev_segIdx[pass] + 1) % 8) {
+            continue;
+        }
         this->segment_num = seg_index;
     }
-    return 0;
+    return 1;
 }
 long HLSDownload::get_hls_data_from_url(char* url, char** data, size_t *size, int type)
 {
@@ -169,8 +194,13 @@ long HLSDownload::get_hls_data_from_url(char* url, char** data, size_t *size, in
 }
 void HLSDownload::vod_download_segment(int centerIdx, int segIdx)
 {
-    //FILE *out_file = fopen("../out.ts", "wb");
-    update_m3u8();
+    while (update_m3u8() != 1) {
+        usleep(5000);
+        continue;
+    }
+
+    char* start = strstr(this->media_playlists[centerIdx]->media_segments[0]->url, "segment");
+    printf("download %d segment :%s\n", segIdx, start);
     HLSMediaSegment* ms = this->media_playlists[centerIdx]->media_segments[0];
     int tries = 20;
     long http_code = 0;
@@ -183,36 +213,36 @@ void HLSDownload::vod_download_segment(int centerIdx, int segIdx)
         }
         break;
     }
-    //fwrite(ms->data, ms->data_len, sizeof(uint8_t), out_file);
     this->segment_ts_len = ms->data_len;
     this->segment_ts_data = (uint8_t*)malloc(ms->data_len * sizeof(uint8_t));
     memcpy(this->segment_ts_data, ms->data, ms->data_len);
     free((ms->data));
+    for (int i = 0; i < stream_num; i++) {
+        for (int j = 0; j < segment_num; j++) {
+            free(this->media_playlists[i]->media_segments[j]);
+        }
+    }
     this->ctx->pulled_centerIdx = centerIdx;
-    printf("pulled view %d\n", centerIdx);
-    //fclose(out_file);
+    //printf("pulled view %d\n", centerIdx);
 }
-
 void HLSDownload::loop_recv()
 {
     int segIdx = 0;
     int scnt = 0;
     while(true) {
-        vod_download_segment(this->ctx->centerIdx, segIdx);
+        vod_download_segment(this->ctx->centerIdx, scnt);
         this->segment_fifo->put(this->segment_ts_data, this->segment_ts_len, scnt);
         free(this->segment_ts_data);
         scnt++;
-        usleep(900000);
+        usleep(750000);
         if (this->packet_cnt > 0 && scnt >= this->packet_cnt){
             usleep(30000);
             break;
         }
     }
 }
-
 void HLSDownload::loop()
 {
-    unsigned int ts_position = 0;
     unsigned int received_length = 0;
     unsigned int available_length = 0;
     unsigned int max_ts_length = 65536;
@@ -220,11 +250,9 @@ void HLSDownload::loop()
     bool start_flag = 0;
     bool received_flag = 0;
     uint8_t* payload_position = NULL;
-    //uint8_t* this->data_buf = (uint8_t*)malloc(max_ts_length);
     int buffer_len = 191760;//188*204*5
     TSHeader* ts_header;
     PESInfo* pes;
-    //FILE* es_fp = fopen("../demo.hevc", "wb");
     int packet_length = 188;
     int cnt = 0;
     int segIdx = 0;
@@ -233,6 +261,7 @@ void HLSDownload::loop()
     int scnt_recv = 0;
     while(true) {
         this->segment_fifo->get(segment_ts_data_recv, segment_ts_len_recv, scnt_recv);
+        //printf("recv segment: %d\n", scnt_recv);
         uint8_t* current_p = segment_ts_data_recv;
         unsigned int read_size = (segment_ts_len_recv >= buffer_len) ? buffer_len : segment_ts_len_recv;
         uint8_t* buffer_data = segment_ts_data_recv;
@@ -272,17 +301,14 @@ void HLSDownload::loop()
                         }
                         if(received_flag){
                             if(received_length + available_length > MAX_FIFO_SIZE){
-                                // max_ts_length = max_ts_length * 2;
-                                // this->data_buf = (uint8_t*)realloc(this->data_buf,max_ts_length);
                                 usleep(1000);
                             }
                             memcpy(this->data_buf + received_length, payload_position, available_length);
                             received_length += available_length;
                             if (segment_ts_data_recv + segment_ts_len_recv - current_p == 188) {
-                                printf("end at frame %d\n", cnt);
+                                //printf("end at frame %d\n", cnt);
                                 pes = new PESInfo(this->data_buf);
                                 if(pes->PES_packet_data_length != 0){
-                                    //fwrite(pes->elementy_stream_position, received_length, 1, es_fp);
                                     this->output[0]->put(pes->elementy_stream_position, received_length, cnt);
                                     usleep(35000);
                                 }
@@ -299,7 +325,10 @@ void HLSDownload::loop()
         read_size = (segment_ts_data_recv - current_p >= buffer_len - segment_ts_len_recv) ? buffer_len : segment_ts_data_recv - current_p + segment_ts_len_recv;
         buffer_data = current_p;
         }
-
+        if (this->packet_cnt > 0 && scnt_recv + 1 >= this->packet_cnt){
+            usleep(30000);
+            break;
+        }
     }
     free(segment_ts_data_recv);
 }

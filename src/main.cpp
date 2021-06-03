@@ -32,7 +32,7 @@ int main(int argc,char *argv[])
     int c = 3;
     int option_index = 0;
     int fifo_len = 10;
-    int frame_num = 1000;
+    int segment_num = 1000;
     int start_id = 10;
     //char inputurl[50] = "http://172.16.7.187/hls/master.m3u8";
     char inputurl[50] = "http://localhost/LiveHLS/master.m3u8";
@@ -41,7 +41,7 @@ int main(int argc,char *argv[])
     long long fifo_data_size = fifo_len * MAX_FIFO_SIZE;
     uint8_t * fifo_data = new uint8_t[fifo_data_size * fifo_num];
 
-    host_ctx->init(frame_num > 0 ? (frame_num + 1) : 0, c);
+    host_ctx->init(segment_num > 0 ? (segment_num + 1) : 0, c);
 
 
     FIFO **video_stream_pulled_265 = new FIFO * [1];
